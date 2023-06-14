@@ -1,0 +1,239 @@
+---
+title: "Mpox Cases: Demographics and Location"
+author: "Leah Ross"
+date: "8/15/22"
+output:
+  slidy_presentation: default
+  beamer_presentation: default
+  ioslides_presentation: default
+---
+# Background
+  
+Monkeypox is a virus that is closely related to smallpox. The first documented case in humans was in the 1970s. Since April 2022, the virus has been spreading rapidly across the globe.
+
+As of August 2022, the virus has been reported in 89 countries.
+
+The World Health Organization has declared the outbreak a public health emergency of international concern.
+
+## Key questions: 
+
+  * Which demographics make up the majority of cases? 
+  
+  * Where are these cases occurring?
+  
+# About the data set
+
+Link: https://github.com/globaldothealth/monkeypox
+
+This data set is from Global.health. It continually tracks the 2022 outbreak of the virus starting in April of 2022 across 97 countries.
+
+Each row in this dataset represents a unique case/person.
+Variables of interest include gender, age, infection status, hospitalization status, country, city, and location.
+ 
+As of August 2nd, 2022, this data set has 28,389 observations.
+
+For the sake of brevity, I have chosen to focus on three countries: Italy, France, and Germany. These countries rank in the top 10 highest number of confirmed total cases globally.
+
+In this subset, France appears 2,255 times, Italy 2,781 times, and Germany 514 times. 
+
+Libraries using:
+```{r}
+library(readxl)
+library(psych)
+library(ggplot2)
+```
+
+***
+
+# Importing the data set
+
+Problems with the original data set and changes I made in Excel:
+
+  * Age group (ex: 60-64, 34-36, 20-24, 15-74)
+  
+  * Gender
+  
+  * Location, City, Country
+```{r}
+mp <- read_excel("~/Desktop/IFG.xlsx")
+View(mp)
+```
+ ***
+# Explore the data 
+
+```{r}
+View(mp)
+summary(mp)
+#check class
+```
+
+*** 
+
+# Delete extraneous variables
+
+```{r}
+names(mp)  
+mp [,c('Country_ISO3','Country_ISO', 'Date_onset', 'Date_entry', 'Contact_comment', 'Contact_ID', 'Contact_location', 'Travel_history', 'Travel_history_entry','Travel_history_start', 'Travel_history_location', 'Travel_history_country', 'Genomics_Metadata', 'Confirmation_method', 'Source', 'Source_II', 'Source_III', 'Source_IV', 'Source_V', 'Source_VI', 'Source_VII', 'Date_last_modified' )]<-list(NULL)
+```
+
+# Change class and categorize variables  
+
+```{r}
+class(mp$ID)
+#already character, because string of numbers and letters in ID 
+mp$Status <-factor(mp$Status)
+class(mp$Status)
+levels(mp$Status) <- c("Confirmed", "Discarded", "Omitted", "Suspected")
+summary(mp$Status)
+mp$Location <-factor(mp$Location)
+class(mp$Location)
+mp$City <-factor(mp$City)
+View(mp)
+class(mp$City)
+mp$Country <-factor(mp$Country)
+levels(mp$Country) <- c("France", "Italy", "Germany")
+class(mp$Country)
+mp$Age <-as.numeric(mp$Age)
+summary(mp$Age)
+mp$Gender <-factor(mp$Gender)
+levels(mp$Gender) <- c("Female", "Male")
+summary(mp$Gender)
+mp$Outcome <-factor(mp$Outcome)
+labels = c("Recovered", "Death", "NA")
+summary(mp$Outcome)
+mp$Hospitalised<-factor(mp$Hospitalised)
+labels = c("Yes", "No", "NA")
+summary(mp$Hospitalised)
+mp$isolated<-factor(mp$Hospitalised)
+labels = c("Yes", "No", "NA")
+summary(mp$Hospitalised)
+#New Data set of confirmed cases
+mpconfirmed <- dplyr::filter(mp, Status == "Confirmed")
+```
+
+*** 
+
+# Demographics of confirmed cases
+```{r}
+summary(mpconfirmed$Age)
+summary(mpconfirmed$Gender)
+```
+
+# Distribution of age in confirmed cases
+```{r}
+mpconfirmed <- mpconfirmed[!is.na(mpconfirmed$Age),]
+  #Subset of Age without NAs
+ggplot(mpconfirmed, aes(x = Age)) +geom_histogram(colour =1, fill = "blue", bins =5)+scale_x_continuous(breaks = seq(0, 90, 10))+scale_y_continuous(breaks = seq(25,500, 25)) + xlab("Age") + ylab("Frequency") + ggtitle("Confirmed Monkeypox Cases by Age") + theme_classic()
+```
+
+## Testing if age is normally distributed. What does this tell us about the age variable?
+```{r}
+qqnorm(mpconfirmed$Age)
+qqline(mpconfirmed$Age)
+```
+
+ ***
+
+# Gender by age in confirmed cases
+```{r} 
+mpconfirmed <- mpconfirmed[!is.na(mpconfirmed$Gender),]
+mpconfirmed <- mpconfirmed[!is.na(mpconfirmed$Age),]
+#Subset of Gender and Age excluding NAs
+ggplot(mpconfirmed, aes(x = Gender, y = Age)) + geom_violin(colour =1, fill = "blue") + xlab("Gender") + ylab("Age") + ggtitle("Confirmed Monkeypox Cases by Age and Gender") + theme_classic() + scale_y_continuous(breaks = seq(0, 90, 10))
+#No females reported in confirmed cases
+#Looking at density of groups/peaks
+```
+
+# Hospitalised by age in confirmed cases
+Suggests the median age between those hospitalised vs. not differs. Interestingly, the median age for hospitalised is younger than the not hospitalised group. Hospitalised has outliers on both the high and low end.
+```{r} 
+mpconfirmed <- mpconfirmed[!is.na(mpconfirmed$Hospitalised),]
+ggplot(mpconfirmed, aes(x = Hospitalised, y = Age)) + geom_boxplot(color =1, fill = "blue") + xlab("Hospitalised") + ylab("Age") + ggtitle("Hospitalised Confirmed Monkeypox Cases by Age") + theme_classic() + scale_y_continuous(breaks = seq(0, 90, 10))
+``` 
+
+ ***
+
+# Which countries are these cases occurring in most?
+## All statuses
+```{r}
+ggplot(mp, aes(x = Country)) +geom_bar(colour =1, fill = "blue") + xlab("Country") + ylab("Frequency") + ggtitle("Monkeypox Cases by Country, All Statuses") + theme_classic() + scale_y_continuous(breaks =seq(0,3000, 200))
+```
+
+## Confirmed cases
+```{r}
+ggplot(mpconfirmed, aes(x = Country)) + geom_bar(colour =1, fill = "blue") + xlab("Country") + ylab("Frequency") + ggtitle("Confirmed Monkeypox Cases by Country") + theme_classic() + scale_y_continuous(breaks =seq(0,25,1))
+```
+
+## Which countries are hospitalizations occuring most?
+```{r}
+mp <- mp[!is.na(mp$Hospitalised),]
+#Excluding NAs in hospitalised among all statuses
+ggplot(mp, aes(x = Country, y = Hospitalised)) + geom_count(fill = "blue") + theme_classic()
+mpconfirmed <- mpconfirmed[!is.na(mpconfirmed$Hospitalised),]
+#Excluding NAs in hospitalised among confirmed cases
+ggplot(mpconfirmed, aes(x = Country, y = Hospitalised)) + geom_count(fill = "blue") + theme_classic()
+```
+
+***
+
+# Regression analysis for all statuses
+```{r}
+# Modeling age by country, gender, and hospitalised using the original dataset
+mpmodel <- lm(Age ~ Country + Gender + Hospitalised, mp)
+summary(mpmodel) 
+#F statistic and p-value are statistically significant
+```
+
+# Logit regression for categorical variable hospitalised by location variables in confirmed cases
+```{r}
+# Modeling hospitalised by country and varies location variables in confirmed cases dataset
+mp <- mp[!is.na(mp$Hospitalised),]
+logit1 <- glm(Hospitalised ~ Country, data=mpconfirmed, family="binomial")
+logit2 <- glm(Hospitalised ~ Country + City, data=mpconfirmed, family="binomial")
+logit3 <- glm(Hospitalised ~ Country + City + 
+                , data=mpconfirmed, family="binomial")
+#Excluding NAs in hospitalised
+```
+
+# Comparing models using AIC
+Smaller the AIC value means better fit in comparison to other model. Adding city to model in explaining hospitalised aids in explanatory power, and then adding location variable further improves the model.
+```{r}
+AIC(logit1, logit2)
+AIC(logit2,logit3)
+```
+
+ ***
+
+# Conclusion
+
+## Key Takeaways: Demographics and location are important in explaining confirmed Monkeypox cases.
+
+  * Demographically, men between the ages of 65-85 make up the vast majority  of confirmed monkeypox cases in Italy, Germany, and France.
+
+  * Location plays an important role in explaining hospitalization.
+  
+## In context
+
+  * The range of the age variable in the original data set and how I recoded it undeniably affected my findings.
+  
+  * The amount of NAs in this data set across all observed countries could indicate the current situation and possible concerns of splotchy data collection across countries.
+  
+  * Because this data was collected on a country level and then compiled, data collection varied across countries.
+  
+## Future Work 
+
+  * Choosing different countries/adding countries into my dataset from the original dataset.
+  
+  * Dealing with the age variable differently, for example, taking the mean of the range.
+  
+  * Hone in on the date variables and look for patterns in cases occurring.
+ 
+ ***
+ 
+# References
+
+Global.health Monkeypox (accessed on 08/11/22) Avaliable at: https://github.com/globaldothealth/monkeypox
+  
+(2022) World Health Organization [Online]. Available at: https://www.who.int/news-room/fact-sheets/detail/monkeypox
+
+Kraemer, M., et al. (2022) 'Tracking the 2022 monkeypox outbreak with epidemiological data in real-time', The Lancet, 22(7). Available at: https://doi.org/10.1016/S1473-3099(22)00359-0
