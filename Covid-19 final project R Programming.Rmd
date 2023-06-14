@@ -1,0 +1,200 @@
+---
+title: "Factors That Help Explain Variation in Covid Deaths in the US"
+author: 'Leah Ross (NetID: lcr7202)'
+output: pdf_document
+---
+# Packages use
+```{r load_packages, message=FALSE, warning=FALSE}
+library(readxl) #read in data from excel
+library(dplyr) #data cleaning
+library(tidyr) #data cleaning
+library(tidyverse) #data cleaning
+library(ggplot2) #visualizations
+library(RColorBrewer) #colors for visualizations
+```
+# Introduction 
+I want to explore how cumulative Covid death rates in the US progressed over time during the Covid-19 pandemic. I seek to understand which states had the worst health outcomes and explore variations across states that could explain these discrepancies, including geographic region and political factors.
+
+The US's Covid response was unique because the federal government did not impose many strict policies. Instead, it was the state level that determined policy responses. Response efforts such as stay-at-home mandates, vaccine requirements, and mask mandates quickly became highly politicized [@ChenandKarim2022]. Generally, Republican states have implemented far less stringent policy responses to the Covid-19 pandemic than Democratic states [@Peng2022]. And as governors hold significant power at the state level, I hypothesize that states with Republican governors experienced an increased number of Covid related deaths compared to states with Democratic governors in 2023.
+
+To understand this relationship, I will first get a general idea of the progression of health outcomes from 2020-2023 using data visualization techniques. I will then hone in on my variable of interest, the annual Covid crude death rates by state, and see if it is related to geographical region and state governors' political party. In doing so, I will test if either of these variables are important in explaining Covid health outcomes in the US.
+ 
+# Data Preparation Summary
+
+The data set I am using on Covid health outcomes is originally from The New York Times Github Repository (https://github.com/nytimes/covid-19-data). The GitHub repository continues to update daily. I am using the downloaded data set from Brightspace for reproducibility. This data set includes cumulative Covid cases and deaths on a daily bases from January 21, 2020, to February 24, 2023. Cumulative cases and death rates are collected on the state, county, and fips level.This data set initially includes observations from 56 US states and territories. There are over 114,000 missing values in this data set. I will drop all rows with missing values for my analysis. This data set is not very messy. I will recode the date variable, add a region variable, and transform the deaths variable into deaths per 100k by year using state population values from The World Population Review. And I will drop all US territories, so my analysis only includes the 50 states.
+
+I will use data on states' governors and political parties from The National Governors Association (https://www.nga.org/wp-content/uploads/2023/01/2023-Governors-Roster.pdf). The National Governors Association is a bipartisan organization that provides extensive information on current governors from the 56 US states and territories, including information on official term dates.This data was available only in PDF form, so I copied the data into an excel document. This is a very straightforward data set. I will use the information from the original governor variable to make a new party variable. And I will rename the factor levels in the party variable to make their values more intuitive. I will delete the columns on terms, and this will get rid of any missing data. I again will drop all US territories, so my analysis includes only the 50 states.
+
+The final data set I use is from the The World Population Review (https://worldpopulationreview.com/states). This website collects data on varying population levels ranging from country to city. This specific data set looks at population counts on the state level from 2010 and 2019 to 2023 in the 50 US states. I am using this data set so that I can make an annual crude death rates variable. There are no missing variables in this data set.
+# Load in data
+```{r warning=FALSE}
+covid <- read.csv("/Users/leah/Desktop/travel/R - Final Project/us-counties_all.csv")
+gov <- read_excel("/Users/leah/Desktop/travel/R - Final Project/Governor and Party.xlsx")
+state_population <- read.csv("/Users/leah/Desktop/travel/R - Final Project/state population.csv")
+```
+# Tidy and clean data sets
+## Covid data set
+```{r}
+#Filter data so only the 50 US states
+covid <-covid %>%
+  filter(state != "Guam" & state != "Virgin Islands" & state != "Puerto Rico" & state != "Northern Mariana Islands" & state != "American Samoa" & state != "Puerto Rico" & state != "District of Columbia") %>%
+  #dropping all rows with NA values in Covid data
+  drop_na()
+
+#Add region variable
+covid <- data.frame(covid)
+covid <-covid %>%
+  mutate(region = case_when(state == "Connecticut" | state =="Maine" | state == "Massachusetts" | state == "New Hampshire"| state == "New Jersey" | state == "Vermont"| state == "Pennsylvania" | state =="Rhode Island" | state =="New York" ~ "Northeast",
+                            state == "Alabama" | state =="Arkansas" | state == "Delaware" | state == "Florida"| state == "Georgia" | state == "Kentucky"| state == "Louisiana" | state =="Maryland" | state =="Mississippi" | state =="North Carolina" | state =="Oklahoma" | state =="Tennessee" | state =="Texas"| state =="Virginia"| state =="West Virginia"~"South",
+                            state == "Illinois" | state =="Indiana" | state == "Iowa" | state == "Kansas"| state == "Michigan" | state == "Minnesota"| state == "Missouri" | state =="Nebraska" | state =="North Dakota" | state =="Ohio" | state =="South Dakota" | state =="Wisconsin"~'Midwest',
+                            state == "Alaska" | state =="Arizona" | state == "California" | state == "Colorado"| state == "Hawaii" | state == "Idaho"| state == "Montana" | state =="Nevada" | state =="New Mexico" | state =="Oregon" | state =="Utah" | state =="Washington" | state =="Wyoming"~'West'))
+
+#Separate date variable so have year, month, and date variables. Make sure variables are in their correct form.
+covid <-covid %>% 
+  separate(date, into = c("year","month", "day"), sep = "-")
+covid <- covid %>%   
+mutate(year = as.integer(year)) %>%  
+  mutate(month = as.integer(month)) %>%  
+  mutate(month = as.integer(day)) %>%
+  mutate(region =as.factor(region)) %>%
+  mutate(state =as.factor(state))
+```
+## Governor data set
+```{r}
+#Deleting unnecessary variables
+gov <- gov[,-3:-6] %>%
+#filter to only US states
+  filter(State != "American Samoa" & State != "Northern Mariana Is." & State != "Virin Islands" & State != "Guam" & State != "Puerto Rico" & State != "Virgin Islands")  %>%
+#separating the previously titled Governor variable into two variables - name of governor and political party  
+  separate(Governor, into= c("governor", "party"), sep= "-", convert=TRUE)
+
+#Rename party type so more intuitive 
+gov$party <- as.factor(recode(gov$party, R = 'Republican',
+                              D = 'Democrat'))
+```
+## State population data set
+```{r}
+#Drop unneeded variables  
+state_population <- state_population[,-8:-14] 
+state_population <- state_population[,-3]
+```
+# Merge
+## Merge Covid, governor, and state population data sets together using state name, keeping all variables from each data set up until this point
+```{r}
+covid_gov_merge <- merge(covid, gov, by.x = "state", 
+                   by.y = "State", all.x = TRUE, all.y = TRUE) %>%
+  drop_na
+covid_gov_pop <- merge(covid_gov_merge, state_population, by.x = "state", 
+                   by.y = "state", all.x = TRUE, all.y = TRUE) 
+#Make deaths per 100k variable for each state. Grouping by state and year, calculating annual crude death rates = (total deaths per state/population of state in 2023)*100,000. By creating this variable, I will reduce the bias in comparing health outcomes across states by controlling for the varying population levels of states. 
+covid_gov_pop <- covid_gov_pop %>%
+  group_by(state,year) %>% 
+  mutate('annual deaths per 100k' = as.numeric(sum(deaths)/sum(pop2023)*100000)) %>%
+  ungroup()  %>%
+  drop_na()
+```
+# Preview of final data set 
+## Example date table:
+```{r}
+covid_gov_pop[1:5, ]
+```
+# Exploratory data analysis 
+## 1. How has annual crude death rates changed overtime from 2020-2023?
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+change_overtime <-ggplot(covid_gov_pop, aes(year)) +
+  geom_bar(stat = "bin",colour =1, fill = "blue") +
+   theme(legend.position="none") +
+  xlab("Year") + ylab("Covid deaths") + ggtitle("Figure 1: Total Covid deaths by year in the US 2020-2023") + scale_y_continuous(labels=function(`annual deaths per 100k`) format(`annual deaths per 100k`, big.mark = ",", scientific = FALSE)) +
+  scale_fill_brewer(palette = "Pastel1") +
+  theme_minimal() 
+change_overtime
+```
+2021 and 2022 were nearly equally the worst years of the pandemic in terms of Covid related deaths, with both years having well over 900,000 total Covid deaths. The sharp decline in 2023 likely reflects the development and largescale distribution of vaccines in the US.
+
+## 2. Which regions had the worst health outcomes?
+```{r}
+region <- ggplot(data=covid_gov_pop, aes(x=`annual deaths per 100k`, group=region, fill=region)) +
+    geom_density(adjust=1.5, position="fill") +
+    theme_minimal() +
+  ggtitle("Figure 2: Covid deaths per 100k by year in the US 2020-2023")
+region
+```
+The Northeast made up the vast majority of annual crude Covid deaths in the US overall, as seen by the extensive green in the density plot. Public health experts have predicted that the Northwest had the greatest overall annual crude death rates density because there is a high proportion of elderly individuals - a demographic with high mortality risk -in the Northeast region in the US. Another explanation is that Covid spikes in the Northeast tended to be especially deadly due to the rapid circulation of the virus in the large cities of the Northeast. Interestingly, the Midwest had the highest density of the highest crude death rates of 60 annual deaths per 100k. 
+
+## 3. Is there a correlation between governors' political party in 2023 and annual crude death rates in the previous 3 years of the pandemic in the US? 
+```{r}
+ggplot(covid_gov_pop, aes(x = party, y = `annual deaths per 100k`, fill=party)) +
+  geom_boxplot(alpha=0.3) + 
+    theme_minimal() +
+   theme(legend.position="none") +
+ ggtitle("Figure 3: Political Party and Covid Annual Crude Death Rates 2020-2023")
+```
+The graphic suggests no significant differences in the median value of annual crude death rates across political party in the US. This is evident as the median, or the thicker black lines, are at the relatively same value. One notable comment about these graphs is we see that democratic have states extensive outlier values in their crude death rates.
+
+```{r message=FALSE, warning=FALSE}
+#Re code categorical variable party to binary so can run correlation tests
+covid_gov_pop$party <- recode(covid_gov_pop$party, Republican =0, Democrat=1)
+cor_party <- covid_gov_pop %>% 
+filter(year==2023)
+cor_party <- cor(cor_party$party, cor_party$`annual deaths per 100k`,use = "all.obs",method ="spearman") 
+#using Spearman's method to calculate correlation because working with a categorical variable. Missing values are not a concern with my data so use all.obs
+print(cor_party)  
+```
+The correlation coefficient between state governors' political party in 2023 and the crude death rate is -0.09. These variables are inversely related, with a rather small magnitude. Meaning, that governor's political party is not as important in explaining state crude death rates in the way I originally hypothesized.
+### Does the correlation between these two variables change depending on what year you look at in terms of total annualc rude deaths? Note: in this dataset, party only accounts for governor's political party in 2023.
+```{r}
+#Correlation between annual crude death rates and political party in 2020
+cor_party_2020 <- covid_gov_pop %>% 
+filter(year==2020)
+cor_party_2020 <- cor(cor_party_2020$party, cor_party_2020$`annual deaths per 100k`,use = "all.obs",method ="spearman") 
+print(cor_party_2020)
+
+#Correlation between annual crude death rates and political party in 2021
+cor_party_2021<- covid_gov_pop %>% 
+filter(year==2021)
+cor_party_2021 <- cor(cor_party_2021$party, cor_party_2021$`annual deaths per 100k`,use = "all.obs",method ="spearman") 
+print(cor_party_2021)
+
+#Correlation between annual crude death rates and political party in 2022
+cor_party_2022 <- covid_gov_pop %>% 
+filter(year==2022)
+cor_party_2022 <- cor(cor_party_2022$party, cor_party_2022$`annual deaths per 100k`,use = "all.obs",method ="spearman") 
+print(cor_party_2022)
+```
+The correlation between the annual crude death rates and state political party in 2020 and 2021 is the same, -0.097. In 2023, the correlation reduces slightly in magnitude to -0.093. My findings suggest that political party and annual crude death rates are not as importantly correlated as I initially suspected.
+
+## Could region and annual crude death rates be correlated?
+```{r message=FALSE, warning=FALSE, include=FALSE}
+ggplot(covid_gov_pop, aes(x = region, y = `annual deaths per 100k`, fill=region)) +
+  geom_boxplot(alpha=0.3) + 
+    theme_minimal() +
+   theme(legend.position="none") +
+  ggtitle("Figure 4: State Region and Covid Annual Crude Death Rates 2020-2023")
+
+#Re code categorical variable party to binary so can run correlation test
+covid_gov_pop$region <- as.numeric(recode(covid_gov_pop$region, South =0,
+                        West=1,
+                        Northeast=2,
+                        Midwest=3
+                        ))
+cor_region <- cor(covid_gov_pop$region, covid_gov_pop$`annual deaths per 100k`, use = "complete.obs",method ="spearman")
+  #NA's introduced so now only use complete observations in calculation
+print(cor_region)
+```
+There is a positive, but weak correlation between annual crude death rates and region. This is likely reflective of the many unique differences across US regions that affected Covid outcomes such as spending on healthcare, stay at home mandates, access to healthcare, etc. It is important to note that this correlation test only confirms that annual crude death rates and region are correlated. I cannot comment on which region's correlation is driving this finding. 
+
+# Summary 
+In summary, I found that 2021 and 2022 were by far the worst year of the Covid pandemic in terms of annual crude death rates. I explored if state governor's political party was related to poor health outcomes but ultimately found a weak correlation. I then found that the correlation between health outcomes across US states and regions was greater than compared to political party.
+
+The next step beyond this analysis is twofold. Firstly, consider if Covid death rates are related to other political factors. Future studies could test if states' health outcomes were related to which party got each state's electoral college vote in 2016 and 2020. The second step is to delve deeper into the correlation between region and death rates and understand what other factors contribute to this relationship.
+
+# References
+Chen HF, Karim SA. Relationship between political partisanship and COVID-19 deaths: future implications for public health. _J Public Health_ (Oxf). 2022 Aug 25;44(3):716-723. (doi: 10.1093/pubmed/fdab136). PMID: 33912968; PMCID: PMC8135482.
+
+National Governors association. Governors Roster 2023. (https://www.nga.org/wp-content/uploads/2023/01/2023-Governors-Roster.pdf)
+
+New York Times. Covid-19-Data. _Github_. (https://github.com/nytimes/covid-19-data)
+
+Peng Y. Politics of COVID-19 vaccine mandates: Left/right-wing authoritarianism, social dominance orientation, and libertarianism. _Pers Individ Dif_. 2022 Aug;194:111661. (doi: 10.1016/j.paid.2022.111661). Epub 2022 Apr 11. PMID: 35431382; PMCID: PMC8995254.
+ 
+World Population Review. US States - Ranked by Population 2023. (https://worldpopulationreview.com/states).
